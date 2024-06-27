@@ -1,36 +1,34 @@
 import type { LocalsObject, Options } from "pug";
-import { vitePluginPugBuild } from "./vite-plugin-pug-build";
+import  vitePluginPugBuild from "./vite-plugin-pug-build";
 import { vitePluginPugServe } from "./vite-plugin-pug-serve";
 
 type PugSettings = {
   options: Options;
-  locals: LocalsObject;
-  langDir?: string;
-  primaryLang?: string;
+    langsDir?: string;
+    pagesDir?: string;
+
 };
 const vitePluginPug = (settings?: {
   build?: Partial<PugSettings>;
   serve?: Partial<PugSettings>;
 }) => {
   const buildSettings = {
-    options: { ...settings?.build?.options },
-    langDir: settings?.build?.langDir,
-    primaryLang: settings?.build?.primaryLang,
+    pugOptions: { ...settings?.build?.options },
+    langsDir: settings?.build?.langsDir,
+    pagesDir: settings?.build?.pagesDir,
   };
   const serveSettings = {
     options: { ...settings?.serve?.options },
-    locals: { ...settings?.serve?.locals },
   };
 
   return [
     vitePluginPugBuild({
-      options: buildSettings.options,
-        langDir: buildSettings.langDir,
-      primaryLang: buildSettings.primaryLang
+      pugOptions: buildSettings.pugOptions,
+      langsDir: buildSettings.langsDir,
+      pagesDir: buildSettings.pagesDir
     }),
     vitePluginPugServe({
       options: serveSettings.options,
-      locals: serveSettings.locals,
 
     }),
   ];

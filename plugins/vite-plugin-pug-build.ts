@@ -1,64 +1,140 @@
-import fs from "fs";
 import path from "path";
-import type { Plugin } from "vite";
-import { compileFile } from "pug";
-import type { Options } from "pug";
+import fs from "fs";
+import pug from "pug";
+import { Plugin } from "vite";
 
-interface PugSettings {
-  locals?: string;
-  options: Options;
-  langDir?: string;
-  primaryLang?: string; // プライマリ言語の追加
+interface PluginOptions {
+  pagesDir: string;
+  langsDir: string;
+  pugOptions?: pug.Options;
 }
 
-export const vitePluginPugBuild = ({
-                                     options,
-                                     langDir,
-                                     primaryLang, // プライマリ言語の追加
-                                   }: PugSettings): Plugin => {
-  const loadLanguages = () =>
-      langDir
-          ? fs.readdirSync(langDir)
-              .filter(file => file.endsWith('.json'))
-              .map(file => ({
-                lang: path.basename(file, '.json'),
-                data: JSON.parse(fs.readFileSync(path.join(langDir, file), 'utf-8'))
-              }))
-          : [];
+interface MetaPage {
+  langCode: string | null;
+  page: string;
+}
 
-  const languages = loadLanguages();
+const isDirectory = async (path: string): Promise<boolean> => {
+  const stats = await fs.promises.stat(path);
+  return stats.isDirectory();
+};
 
-  const generateHtml = (pugFile: string, data: Record<string, any>, lang: string) => {
-    const html = compileFile(pugFile, options)(data);
-    const outputPath = path.join("dist", lang, path.relative("src/pages", pugFile).replace(/\.pug$/, ".html"));
-    fs.mkdirSync(path.dirname(outputPath), { recursive: true });
-    fs.writeFileSync(outputPath, html, "utf-8");
+const getFilelist = async (baseDir: string, ext = '.pug'): Promise<Array<string>> => {
+  const files = await fs.promises.readdir(baseDir);
+  const filePromises = files.map(async (file) => {
+    const resolvedPath = path.resolve(baseDir, file);
+    return (await isDirectory(resolvedPath)) ? getFilelist(resolvedPath, ext) : (path.extname(resolvedPath) === ext ? [resolvedPath] : []);
+  });
+  const fileArrays = await Promise.all(filePromises);
+  return fileArrays.flat();
+};
+
+const loadLang = async (langPath: string) => {
+  const langCode = path.basename(langPath, ".json");
+  const langJson = await fs.promises.readFile(langPath, "utf-8");
+  const langObject = JSON.parse(langJson);
+  const translations = Object.fromEntries(Object.entries(langObject).map(([key, value]) => [`__${key}`, value]));
+  return { langCode, translations };
+};
+
+const vitePluginPugI18n = ({ pagesDir, langsDir, pugOptions = {} }: PluginOptions) : Plugin => {
+  const langMap = new Map<string, any>();
+  const langMetaMap = new Map<string, MetaPage>();
+  const pageMap = new Map<string, pug.compileTemplate>();
+  let pagesFound: Array<string> = [];
+
+  const loadLangs = async () => {
+
+    const langsFound = await getFilelist(langsDir, '.json');
+    const langPromises = langsFound.map(loadLang);
+    const langResults = await Promise.all(langPromises);
+    langResults.forEach(({ langCode, translations }) => {
+      langMap.set(langCode, translations);
+    });
+  };
+
+  const loadPages = async () => {
+    pagesFound = await getFilelist(pagesDir);
+  };
+
+  const getDistPath = (baseDir: string, page: string, langCode = ''): string => {
+    const relativePath = path.relative(baseDir, page).replace(/\.pug$/, ".html");
+    return langCode ? path.normalize(`${baseDir}/${langCode}/${relativePath}`) : path.normalize(`${baseDir}/${relativePath}`);
+  };
+
+  const processPages = () => {
+    const input: Record<string, string> = {};
+    pagesFound.forEach(page => {
+      if (langMap.size > 0) {
+        langMap.forEach((_, langCode) => {
+          const distPath = getDistPath(pagesDir, page, langCode);
+          input[distPath] = distPath;
+          langMetaMap.set(distPath, { langCode, page });
+        });
+      } else {
+        const distPath = getDistPath(pagesDir, page);
+        input[distPath] = distPath;
+        langMetaMap.set(distPath, { langCode: null, page });
+      }
+    });
+    return input;
   };
 
   return {
-    name: "vite-plugin-pug-build",
+    name: "vite-plugin-pug-i18n",
     enforce: "pre",
     apply: "build",
-    resolveId(source: string) {
-      if (source.endsWith(".pug")) {
-        return source.replace(/\.pug$/, ".html");
-      }
-      return null;
-    },
-    load(id: string) {
-      if (id.endsWith(".html")) {
-        const pugFile = id.replace(/\.html$/, ".pug");
-        if (fs.existsSync(pugFile)) {
-          languages.forEach(({ lang, data }) => generateHtml(pugFile, data, lang));
 
-          // プライマリ言語のHTMLを返す
-          const primaryLangData = languages.find(({ lang }) => lang === primaryLang);
-          if (primaryLangData) {
-            return compileFile(pugFile, options)(primaryLangData.data);
+    async config(userConfig) {
+      console.log(pagesDir, langsDir, pugOptions);
+      await loadPages();
+      await loadLangs();
+      path.normalize(pagesDir).replace(/^(\/|\\)+/, '').replace(/\\+/g, '/');
+      const prefix = userConfig.base;
+
+      return {
+        build: {
+          rollupOptions: {
+            input: processPages(),
+            output: {
+              assetFileNames: `assets/[name]-[hash][extname]`,
+              chunkFileNames: `assets/[name]-[hash].js`
+            }
           }
+        },
+        base: prefix && !pagesDir ? prefix : '/'
+      };
+    },
+
+    resolveId(id, importer) {
+      if (langMetaMap.has(id)) return id;
+      if (importer && langMetaMap.has(importer)) {
+        if (id === "vite/modulepreload-polyfill") {
+          return;
         }
       }
-      return null;
+    },
+
+    async load(id) {
+      const meta = langMetaMap.get(id);
+      if (!meta) return;
+
+      const { langCode, page } = meta;
+      let template = pageMap.get(page);
+
+      if (!template) {
+        template = pug.compileFile(page, pugOptions);
+        pageMap.set(page, template);
+      }
+
+      if (langCode) {
+        const translations = langMap.get(langCode);
+        return template({ ...translations, base: pagesDir });
+      } else {
+        return template({ base: pagesDir });
+      }
     }
   };
 };
+
+export default vitePluginPugI18n;

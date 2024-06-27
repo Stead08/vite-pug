@@ -11,6 +11,9 @@ devDependencies:
   '@types/pug':
     specifier: ^2.0.10
     version: 2.0.10
+  destyle.css:
+    specifier: ^4.0.1
+    version: 4.0.1
   pug:
     specifier: ^3.0.3
     version: 3.0.3
@@ -451,6 +454,10 @@ packages:
       es-define-property: 1.0.0
       es-errors: 1.3.0
       gopd: 1.0.1
+    dev: true
+
+  /destyle.css@4.0.1:
+    resolution: {integrity: sha512-G9iyW0JfRkgdxhbWQeuLdO1KZ40nzKssHtArbSFvaU/w44G0cZ5v3u4bHY829INSu480J/fxae+lTm225mN3Vw==}
     dev: true
 
   /doctypes@1.1.0:

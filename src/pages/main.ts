@@ -1,0 +1,5 @@
+import "destyle.css"
+import { hoge} from "../scripts/script.ts";
+
+console.log("pug")
+console.log(hoge())

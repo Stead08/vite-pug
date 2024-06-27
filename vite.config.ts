@@ -6,13 +6,9 @@ export default defineConfig({
   base: "/",
   root: "src/pages",
   build: {
-    outDir: resolve(__dirname, "dist/ja"),
+    outDir: resolve(__dirname, "dist"),
     emptyOutDir: true,
     rollupOptions: {
-      input: {
-        main: resolve(__dirname, "src", "pages/index.pug"),
-        nested: resolve(__dirname, "src", "pages/sub/index.pug"),
-      },
       external: ['**/*.pug']
     }
   },
@@ -20,11 +16,11 @@ export default defineConfig({
   plugins: [
     vitePluginPug({
         build: {
-            options: {
+            pugOptions: {
             pretty: true,
             },
-            langDir: "src/i18n",
-            primaryLang: "ja",
+            langsDir: "src/i18n",
+            pagesDir: "src/pages",
         },
         serve: {
             options: {

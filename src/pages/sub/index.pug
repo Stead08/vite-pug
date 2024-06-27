@@ -2,6 +2,8 @@ doctype html
 html
   head
     title Sub Page
+    link(rel='stylesheet' href='/style.css')
   body
     h1 Sub Page
-    p #{sub_message}
+    p #{__sub_message}
+    script(src='/main.ts', type='module')

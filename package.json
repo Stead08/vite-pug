@@ -11,6 +11,7 @@
   "devDependencies": {
     "@types/node": "^20.14.9",
     "@types/pug": "^2.0.10",
+    "destyle.css": "^4.0.1",
     "pug": "^3.0.3",
     "typescript": "^5.2.2",
     "vite": "^5.3.1"
